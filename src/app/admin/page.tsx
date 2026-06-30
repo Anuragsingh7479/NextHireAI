@@ -119,8 +119,9 @@ export default function AdminPage() {
                   u.plan ?? "free",
                   u.subscriptionStatus ?? "inactive",
                   u.lastSeenAt ? timeago(u.lastSeenAt) : "—",
-                  <span key="m" className="flex gap-1">
-                    <MiniBtn onClick={() => grant(u.uid, "pro_3m")}>Grant Pro</MiniBtn>
+                  <span key="m" className="flex flex-wrap gap-1">
+                    <MiniBtn onClick={() => grant(u.uid, "pro_1m")}>Grant 1 Month</MiniBtn>
+                    <MiniBtn onClick={() => grant(u.uid, "pro_3m")}>Grant 3 Months</MiniBtn>
                     <MiniBtn onClick={() => grant(u.uid, "free")}>Revoke</MiniBtn>
                   </span>,
                 ])}
