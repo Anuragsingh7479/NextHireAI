@@ -1,0 +1,156 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ───────────────────────────────────────────────────────────────────────────
+   NextHireAI — Design tokens
+   Lifted verbatim from the original standalone hero design so the production
+   app matches the brand exactly: single dark surface, hairline borders, NO
+   drop shadows, white universal CTA, Inter with the ss03 stylistic set.
+   --font-inter / --font-jetbrains are injected by next/font in layout.tsx.
+   ─────────────────────────────────────────────────────────────────────────── */
+:root {
+  /* Brand & primary action */
+  --color-primary: #ffffff;
+  --color-primary-pressed: #e8e8e8;
+  --color-on-primary: #000000;
+
+  /* Surface ladder (elevation without shadow) */
+  --color-canvas: #07080a;
+  --color-surface: #0d0d0d;
+  --color-surface-elevated: #101111;
+  --color-surface-card: #121212;
+  --color-button-fg: #18191a;
+
+  /* Hairline borders */
+  --color-hairline: #242728;
+  --color-hairline-soft: rgba(255, 255, 255, 0.08);
+  --color-hairline-strong: rgba(255, 255, 255, 0.16);
+
+  /* Text */
+  --color-ink: #f4f4f6;
+  --color-body: #cdcdcd;
+  --color-charcoal: #d3d3d4;
+  --color-mute: #9c9c9d;
+  --color-ash: #6a6b6c;
+  --color-stone: #434345;
+
+  /* Semantic / category accents (illustrations only) */
+  --color-accent-blue: #57c1ff;
+  --color-accent-red: #ff6161;
+  --color-accent-green: #59d499;
+  --color-accent-yellow: #ffc533;
+
+  /* Brand gradients */
+  --color-hero-stripe-start: #ff5757;
+  --color-hero-stripe-end: #a1131a;
+  --gradient-hero-stripe: repeating-linear-gradient(
+    115deg,
+    var(--color-hero-stripe-start) 0px,
+    var(--color-hero-stripe-end) 140px,
+    var(--color-hero-stripe-start) 280px
+  );
+
+  /* Type */
+  --font-sans: var(--font-inter), "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-jetbrains), "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-features: "calt", "kern", "liga", "ss03";
+  --font-features-display: "calt", "kern", "ss02", "ss03", "ss08";
+
+  /* Radii */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* Layout */
+  --container-max: 1240px;
+  --hero-mockup-max: 1080px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--font-sans);
+  font-feature-settings: var(--font-features);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  margin: 0;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* The single brand red stripe — once per page, top of hero */
+.hero-stripe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 240px;
+  background: var(--gradient-hero-stripe);
+  -webkit-mask: linear-gradient(180deg, rgba(0, 0, 0, 0.5), transparent 72%);
+  mask: linear-gradient(180deg, rgba(0, 0, 0, 0.5), transparent 72%);
+  opacity: 0.36;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Entrance reveal — resting state is VISIBLE; the hidden start + animation only
+   apply while .is-in is present and motion is allowed, so reduced-motion shows
+   the end state immediately. */
+@keyframes lineRise {
+  from { opacity: 0; transform: translateY(22px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes softFade {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.reveal-line,
+.hero-fade { opacity: 1; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .is-in .reveal-line {
+    opacity: 0;
+    animation: lineRise 0.8s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+    animation-delay: var(--d, 0ms);
+  }
+  .is-in .hero-fade {
+    opacity: 0;
+    animation: softFade 0.7s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+    animation-delay: var(--d, 0ms);
+  }
+}
+
+/* marquee */
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.marquee-track { animation: marquee 32s linear infinite; }
+.marquee-mask {
+  -webkit-mask: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+  mask: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track { animation: none; }
+}
+
+/* responsive — mirror the original hero breakpoints */
+@media (max-width: 960px) {
+  .nav-links { display: none !important; }
+  .hero-col-right { display: none !important; }
+}
+@media (max-width: 820px) {
+  .hero-grid { grid-template-columns: 1fr !important; text-align: center; }
+  .hero-col-left { margin: 0 auto !important; }
+}

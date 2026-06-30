@@ -1,0 +1,40 @@
+{
+  "name": "nexthireai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NextHireAI — AI Resume & Cover Letter Builder SaaS",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@react-pdf/renderer": "^4.1.6",
+    "clsx": "^2.1.1",
+    "docx": "^9.1.1",
+    "firebase": "^11.3.0",
+    "firebase-admin": "^13.1.0",
+    "next": "^16.2.9",
+    "nodemailer": "^9.0.3",
+    "openai": "^4.83.0",
+    "qrcode.react": "^4.2.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "tailwind-merge": "^3.0.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "@types/nodemailer": "^8.0.1",
+    "@types/react": "^19.0.8",
+    "@types/react-dom": "^19.0.3",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.19.0",
+    "eslint-config-next": "^16.2.9",
+    "postcss": "^8.5.1",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.3"
+  }
+}
