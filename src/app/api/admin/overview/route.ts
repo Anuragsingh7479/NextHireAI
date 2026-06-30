@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 export async function GET() {
   try {
     await requireAdmin();
-    const snap = adminSnapshot();
+    const snap = await adminSnapshot();
     const paid = snap.paymentRequests.filter((p) => p.status === "approved");
     const revenue = paid.reduce((sum, p) => sum + (p.amount ?? 0), 0);
     const proUsers = snap.users.filter((u) =>

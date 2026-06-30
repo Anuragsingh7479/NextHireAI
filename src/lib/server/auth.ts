@@ -70,7 +70,7 @@ export async function getSessionUser(): Promise<ServerUser | null> {
   if (!token) return null;
   const userId = unsign(token);
   if (!userId) return null;
-  return getUser(userId) ?? null;
+  return (await getUser(userId)) ?? null;
 }
 
 export function isAdminEmail(email: string | undefined): boolean {

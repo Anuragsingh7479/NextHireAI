@@ -17,7 +17,7 @@ export async function POST(req: Request) {
   if (!email || !otp || !password) return NextResponse.json({ error: "All fields are required." }, { status: 400 });
   if (password.length < 6) return NextResponse.json({ error: "Password must be at least 6 characters." }, { status: 400 });
 
-  const user = findUserByEmail(email);
+  const user = await findUserByEmail(email);
   if (!user || !user.resetOtpHash || !user.resetOtpExpires) {
     return NextResponse.json({ error: "Request a new code." }, { status: 400 });
   }
@@ -30,7 +30,7 @@ export async function POST(req: Request) {
     crypto.timingSafeEqual(Buffer.from(sha256(otp)), Buffer.from(user.resetOtpHash));
   if (!ok) return NextResponse.json({ error: "Invalid code." }, { status: 400 });
 
-  updatePassword(user.id, hashPassword(password));
+  await updatePassword(user.id, hashPassword(password));
 
   const res = NextResponse.json({ ok: true, user: publicUser({ ...user, passwordHash: "" }) });
   setSessionCookie(res, user.id); // auto sign-in after reset

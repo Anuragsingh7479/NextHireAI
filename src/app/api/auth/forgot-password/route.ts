@@ -12,12 +12,12 @@ export async function POST(req: Request) {
   const { email } = (await req.json()) as { email?: string };
   if (!email) return NextResponse.json({ error: "Enter your email." }, { status: 400 });
 
-  const user = findUserByEmail(email);
+  const user = await findUserByEmail(email);
   // Respond the same whether or not the account exists (avoid account enumeration).
   if (!user) return NextResponse.json({ ok: true });
 
   const code = String(crypto.randomInt(100000, 1000000)); // 6 digits
-  setResetOtp(user.id, sha256(code), Date.now() + 10 * 60 * 1000);
+  await setResetOtp(user.id, sha256(code), Date.now() + 10 * 60 * 1000);
 
   try {
     await sendEmail({ to: user.email, ...otpEmail(code) });

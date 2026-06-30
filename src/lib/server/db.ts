@@ -1,20 +1,14 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Server-side JSON database. Real persistence on the server (not the browser),
-// so data survives sign-out / sign-in and is shared across devices that hit the
-// same server. No external keys required. For higher scale this single file can
-// be swapped for Postgres/SQLite behind the same helper API.
+// Server database — MongoDB. Works on serverless hosts (Vercel/Netlify) because
+// data lives in a hosted database, not on the function's disk. Set MONGODB_URI
+// (e.g. a free MongoDB Atlas cluster). The client connection is cached globally
+// so serverless invocations reuse it instead of reconnecting every request.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import "server-only";
-import fs from "node:fs";
-import path from "node:path";
-import type {
-  Plan,
-  SubscriptionStatus,
-  Resume,
-  CoverLetter,
-  PaymentRequest,
-} from "@/lib/types";
+import { MongoClient, type Db } from "mongodb";
+import { PLAN_PRICES } from "@/lib/types";
+import type { Plan, SubscriptionStatus, Resume, CoverLetter, PaymentRequest } from "@/lib/types";
 
 export interface ServerUser {
   id: string;
@@ -31,162 +25,174 @@ export interface ServerUser {
   resetOtpExpires?: number;
 }
 
-interface DB {
-  users: Record<string, ServerUser>;
-  resumes: Record<string, Resume & { ownerUid: string }>;
-  coverLetters: Record<string, CoverLetter & { ownerUid: string }>;
-  paymentRequests: Record<string, PaymentRequest>;
-  analytics: { visits: number; daily: Record<string, number> };
+const URI = process.env.MONGODB_URI;
+const DB_NAME = process.env.MONGODB_DB || "nexthireai";
+export const dbConfigured = Boolean(URI);
+
+// Cache the client across hot reloads (dev) and warm invocations (serverless).
+declare global {
+  // eslint-disable-next-line no-var
+  var _nhMongo: Promise<MongoClient> | undefined;
 }
 
-const DATA_DIR = path.join(process.cwd(), ".data");
-const DB_FILE = path.join(DATA_DIR, "db.json");
-
-function emptyDB(): DB {
-  return { users: {}, resumes: {}, coverLetters: {}, paymentRequests: {}, analytics: { visits: 0, daily: {} } };
+function clientPromise(): Promise<MongoClient> {
+  if (!URI) throw new Error("MONGODB_URI is not set. Add your MongoDB connection string.");
+  if (!global._nhMongo) global._nhMongo = new MongoClient(URI).connect();
+  return global._nhMongo;
 }
 
-function load(): DB {
-  try {
-    const raw = fs.readFileSync(DB_FILE, "utf8");
-    const parsed = JSON.parse(raw) as Partial<DB>;
-    return { ...emptyDB(), ...parsed } as DB;
-  } catch {
-    return emptyDB();
-  }
-}
-
-function save(db: DB) {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-  const tmp = DB_FILE + ".tmp";
-  fs.writeFileSync(tmp, JSON.stringify(db, null, 2));
-  fs.renameSync(tmp, DB_FILE); // atomic-ish replace
-}
-
-/** Read-modify-write helper to keep mutations consistent. */
-export function tx<T>(fn: (db: DB) => T): T {
-  const db = load();
-  const result = fn(db);
-  save(db);
-  return result;
-}
-
-export function read<T>(fn: (db: DB) => T): T {
-  return fn(load());
+async function getDb(): Promise<Db> {
+  return (await clientPromise()).db(DB_NAME);
 }
 
 export const newId = (prefix = "id") =>
   `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
-// ── User helpers ─────────────────────────────────────────────────────────────
-export function findUserByEmail(email: string): ServerUser | undefined {
-  const e = email.toLowerCase();
-  return read((db) => Object.values(db.users).find((u) => u.email.toLowerCase() === e));
+// ── Users ─────────────────────────────────────────────────────────────────────
+export async function findUserByEmail(email: string): Promise<ServerUser | undefined> {
+  const db = await getDb();
+  const d = await db.collection("users").findOne({ emailLower: email.toLowerCase() });
+  return (d as unknown as ServerUser) ?? undefined;
 }
-export function getUser(id: string): ServerUser | undefined {
-  return read((db) => db.users[id]);
+export async function getUser(id: string): Promise<ServerUser | undefined> {
+  const db = await getDb();
+  const d = await db.collection("users").findOne({ _id: id as never });
+  return (d as unknown as ServerUser) ?? undefined;
 }
-export function touchUser(id: string) {
-  tx((db) => {
-    if (db.users[id]) db.users[id].lastSeenAt = Date.now();
-  });
+export async function createUser(u: ServerUser): Promise<ServerUser> {
+  const db = await getDb();
+  await db.collection("users").insertOne({ _id: u.id as never, emailLower: u.email.toLowerCase(), ...u });
+  return u;
 }
-
-export function setResetOtp(id: string, hash: string, expires: number) {
-  tx((db) => {
-    if (db.users[id]) {
-      db.users[id].resetOtpHash = hash;
-      db.users[id].resetOtpExpires = expires;
-    }
-  });
+export async function touchUser(id: string) {
+  const db = await getDb();
+  await db.collection("users").updateOne({ _id: id as never }, { $set: { lastSeenAt: Date.now() } });
 }
-
-export function updatePassword(id: string, passwordHash: string) {
-  tx((db) => {
-    if (db.users[id]) {
-      db.users[id].passwordHash = passwordHash;
-      delete db.users[id].resetOtpHash;
-      delete db.users[id].resetOtpExpires;
-    }
-  });
+export async function setResetOtp(id: string, hash: string, expires: number) {
+  const db = await getDb();
+  await db.collection("users").updateOne({ _id: id as never }, { $set: { resetOtpHash: hash, resetOtpExpires: expires } });
 }
-
-// ── Resume / cover-letter helpers ────────────────────────────────────────────
-export const listResumes = (uid: string) =>
-  read((db) => Object.values(db.resumes).filter((r) => r.ownerUid === uid).sort((a, b) => b.updatedAt - a.updatedAt));
-export const getResume = (uid: string, id: string) =>
-  read((db) => (db.resumes[id]?.ownerUid === uid ? db.resumes[id] : undefined));
-export const listCoverLetters = (uid: string) =>
-  read((db) => Object.values(db.coverLetters).filter((c) => c.ownerUid === uid).sort((a, b) => b.updatedAt - a.updatedAt));
-export const getCoverLetter = (uid: string, id: string) =>
-  read((db) => (db.coverLetters[id]?.ownerUid === uid ? db.coverLetters[id] : undefined));
+export async function updatePassword(id: string, passwordHash: string) {
+  const db = await getDb();
+  await db
+    .collection("users")
+    .updateOne({ _id: id as never }, { $set: { passwordHash }, $unset: { resetOtpHash: "", resetOtpExpires: "" } });
+}
+export async function updateUserName(id: string, name: string) {
+  const db = await getDb();
+  await db.collection("users").updateOne({ _id: id as never }, { $set: { name } });
+}
 
 // ── Subscriptions ────────────────────────────────────────────────────────────
-import { PLAN_PRICES } from "@/lib/types";
+export async function grantPlan(uid: string, plan: Plan): Promise<ServerUser | undefined> {
+  const db = await getDb();
+  const set =
+    plan === "free"
+      ? { plan, subscriptionStatus: "inactive" as SubscriptionStatus, planActivatedAt: null, planExpiresAt: null }
+      : (() => {
+          const now = Date.now();
+          return {
+            plan,
+            subscriptionStatus: "active" as SubscriptionStatus,
+            planActivatedAt: now,
+            planExpiresAt: now + PLAN_PRICES[plan].months * 30 * 24 * 60 * 60 * 1000,
+          };
+        })();
+  await db.collection("users").updateOne({ _id: uid as never }, { $set: set });
+  return getUser(uid);
+}
 
-/**
- * Grant (or revoke) a plan. Activates for exactly the purchased number of months
- * from this moment. This is the single source of truth for premium access.
- */
-export function grantPlan(uid: string, plan: Plan): ServerUser | undefined {
-  return tx((db) => {
-    const u = db.users[uid];
-    if (!u) return undefined;
-    if (plan === "free") {
-      u.plan = "free";
-      u.subscriptionStatus = "inactive";
-      u.planActivatedAt = null;
-      u.planExpiresAt = null;
-    } else {
-      const months = PLAN_PRICES[plan].months;
-      const now = Date.now();
-      u.plan = plan;
-      u.subscriptionStatus = "active";
-      u.planActivatedAt = now;
-      u.planExpiresAt = now + months * 30 * 24 * 60 * 60 * 1000;
-    }
-    return u;
-  });
+// ── Resumes ────────────────────────────────────────────────────────────────────
+export async function listResumes(uid: string): Promise<Resume[]> {
+  const db = await getDb();
+  return (await db.collection("resumes").find({ ownerUid: uid }).sort({ updatedAt: -1 }).toArray()) as unknown as Resume[];
+}
+export async function getResume(uid: string, id: string): Promise<Resume | undefined> {
+  const db = await getDb();
+  const d = await db.collection("resumes").findOne({ _id: id as never, ownerUid: uid });
+  return (d as unknown as Resume) ?? undefined;
+}
+export async function upsertResume(resume: Resume & { ownerUid: string }) {
+  const db = await getDb();
+  await db.collection("resumes").replaceOne({ _id: resume.id as never }, { _id: resume.id as never, ...resume }, { upsert: true });
+}
+export async function deleteResume(uid: string, id: string) {
+  const db = await getDb();
+  await db.collection("resumes").deleteOne({ _id: id as never, ownerUid: uid });
+}
+
+// ── Cover letters ────────────────────────────────────────────────────────────
+export async function listCoverLetters(uid: string): Promise<CoverLetter[]> {
+  const db = await getDb();
+  return (await db.collection("coverLetters").find({ ownerUid: uid }).sort({ updatedAt: -1 }).toArray()) as unknown as CoverLetter[];
+}
+export async function getCoverLetter(uid: string, id: string): Promise<CoverLetter | undefined> {
+  const db = await getDb();
+  const d = await db.collection("coverLetters").findOne({ _id: id as never, ownerUid: uid });
+  return (d as unknown as CoverLetter) ?? undefined;
+}
+export async function upsertCoverLetter(cl: CoverLetter & { ownerUid: string }) {
+  const db = await getDb();
+  await db.collection("coverLetters").replaceOne({ _id: cl.id as never }, { _id: cl.id as never, ...cl }, { upsert: true });
+}
+export async function deleteCoverLetter(uid: string, id: string) {
+  const db = await getDb();
+  await db.collection("coverLetters").deleteOne({ _id: id as never, ownerUid: uid });
 }
 
 // ── Payment requests ─────────────────────────────────────────────────────────
-export const savePaymentRequest = (pr: PaymentRequest) =>
-  tx((db) => {
-    db.paymentRequests[pr.id] = pr;
+export async function savePaymentRequest(pr: PaymentRequest) {
+  const db = await getDb();
+  await db.collection("paymentRequests").replaceOne({ _id: pr.id as never }, { _id: pr.id as never, ...pr }, { upsert: true });
+}
+export async function getPaymentRequest(id: string): Promise<PaymentRequest | undefined> {
+  const db = await getDb();
+  const d = await db.collection("paymentRequests").findOne({ _id: id as never });
+  return (d as unknown as PaymentRequest) ?? undefined;
+}
+export async function listAllPaymentRequests(): Promise<PaymentRequest[]> {
+  const db = await getDb();
+  const all = (await db.collection("paymentRequests").find({}).toArray()) as unknown as PaymentRequest[];
+  return all.sort((a, b) => {
+    if (a.status !== b.status) return a.status === "pending" ? -1 : 1;
+    return b.createdAt - a.createdAt;
   });
-export const getPaymentRequest = (id: string) => read((db) => db.paymentRequests[id]);
-export const listAllPaymentRequests = () =>
-  read((db) =>
-    Object.values(db.paymentRequests).sort((a, b) => {
-      if (a.status !== b.status) return a.status === "pending" ? -1 : 1;
-      return b.createdAt - a.createdAt;
-    })
-  );
-export const listUserPaymentRequests = (uid: string) =>
-  read((db) => Object.values(db.paymentRequests).filter((r) => r.uid === uid).sort((a, b) => b.createdAt - a.createdAt));
-export const setPaymentRequestStatus = (id: string, status: PaymentRequest["status"]) =>
-  tx((db) => {
-    if (db.paymentRequests[id]) {
-      db.paymentRequests[id].status = status;
-      db.paymentRequests[id].reviewedAt = Date.now();
-    }
-  });
+}
+export async function listUserPaymentRequests(uid: string): Promise<PaymentRequest[]> {
+  const db = await getDb();
+  const all = (await db.collection("paymentRequests").find({ uid }).toArray()) as unknown as PaymentRequest[];
+  return all.sort((a, b) => b.createdAt - a.createdAt);
+}
+export async function setPaymentRequestStatus(id: string, status: PaymentRequest["status"]) {
+  const db = await getDb();
+  await db.collection("paymentRequests").updateOne({ _id: id as never }, { $set: { status, reviewedAt: Date.now() } });
+}
 
 // ── Analytics + admin snapshot ───────────────────────────────────────────────
-export const bumpVisits = () =>
-  tx((db) => {
-    db.analytics.visits += 1;
-    const d = new Date().toISOString().slice(0, 10);
-    db.analytics.daily[d] = (db.analytics.daily[d] ?? 0) + 1;
-  });
+export async function bumpVisits() {
+  const db = await getDb();
+  const today = new Date().toISOString().slice(0, 10);
+  await db
+    .collection("meta")
+    .updateOne({ _id: "analytics" as never }, { $inc: { visits: 1, [`daily.${today}`]: 1 } }, { upsert: true });
+}
 
-export const adminSnapshot = () =>
-  read((db) => ({
-    users: Object.values(db.users),
-    resumeCount: Object.keys(db.resumes).length,
-    coverLetterCount: Object.keys(db.coverLetters).length,
-    paymentRequests: Object.values(db.paymentRequests),
-    visits: db.analytics.visits,
-  }));
+export async function adminSnapshot() {
+  const db = await getDb();
+  const [users, resumeCount, coverLetterCount, paymentRequests, meta] = await Promise.all([
+    db.collection("users").find({}).toArray(),
+    db.collection("resumes").countDocuments(),
+    db.collection("coverLetters").countDocuments(),
+    db.collection("paymentRequests").find({}).toArray(),
+    db.collection("meta").findOne({ _id: "analytics" as never }),
+  ]);
+  return {
+    users: users as unknown as ServerUser[],
+    resumeCount,
+    coverLetterCount,
+    paymentRequests: paymentRequests as unknown as PaymentRequest[],
+    visits: (meta?.visits as number) ?? 0,
+  };
+}
 
 export type { Plan, Resume, CoverLetter, PaymentRequest, SubscriptionStatus };

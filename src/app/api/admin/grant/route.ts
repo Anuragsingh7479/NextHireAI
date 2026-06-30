@@ -11,7 +11,7 @@ export async function POST(req: Request) {
     await requireAdmin();
     const { uid, plan } = (await req.json()) as { uid: string; plan: Plan };
     if (!uid || !plan) return NextResponse.json({ error: "uid and plan required." }, { status: 400 });
-    const updated = grantPlan(uid, plan);
+    const updated = await grantPlan(uid, plan);
     if (!updated) return NextResponse.json({ error: "User not found." }, { status: 404 });
     return NextResponse.json({ ok: true });
   } catch (e) {

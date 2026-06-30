@@ -34,6 +34,6 @@ export async function POST(req: Request) {
     status: "pending",
     createdAt: Date.now(),
   };
-  savePaymentRequest(pr);
+  await savePaymentRequest(pr);
   return NextResponse.json({ ok: true, id: pr.id });
 }

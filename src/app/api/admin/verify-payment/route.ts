@@ -16,17 +16,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "id and valid action required." }, { status: 400 });
     }
 
-    const pr = getPaymentRequest(id);
+    const pr = await getPaymentRequest(id);
     if (!pr) return NextResponse.json({ error: "Request not found." }, { status: 404 });
 
     if (action === "reject") {
-      setPaymentRequestStatus(id, "rejected");
+      await setPaymentRequestStatus(id, "rejected");
       return NextResponse.json({ ok: true, status: "rejected" });
     }
 
     // Grant the purchased plan right now, then mark the request approved.
-    const updated = grantPlan(pr.uid, pr.plan);
-    setPaymentRequestStatus(id, "approved");
+    const updated = await grantPlan(pr.uid, pr.plan);
+    await setPaymentRequestStatus(id, "approved");
     return NextResponse.json({ ok: true, status: "approved", expiresAt: updated?.planExpiresAt ?? null });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Unauthorized";
