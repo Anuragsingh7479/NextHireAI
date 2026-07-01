@@ -82,8 +82,8 @@ export default function AdminPage() {
           </span>
         </div>
         <div className="flex items-center gap-3 text-sm">
-          <span className="text-mute">{user.email}</span>
-          <button onClick={() => signOut()} className="text-mute hover:text-ink">
+          <span className="hidden text-mute sm:inline">{user.email}</span>
+          <button onClick={() => signOut()} className="shrink-0 text-mute hover:text-ink">
             Sign out
           </button>
         </div>

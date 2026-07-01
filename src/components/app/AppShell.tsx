@@ -119,7 +119,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        {/* mobile nav */}
+        {/* mobile nav — includes Admin + Sign out since the sidebar is hidden here */}
         <div className="flex gap-1 overflow-x-auto border-b border-hairline px-4 py-2 md:hidden">
           {NAV.map((item) => (
             <Link
@@ -130,6 +130,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               {item.label}
             </Link>
           ))}
+          {admin && (
+            <Link
+              href="/admin"
+              className="whitespace-nowrap rounded-md px-3 py-1.5 text-[13px] font-medium text-accent-yellow"
+            >
+              ★ Admin
+            </Link>
+          )}
+          <button
+            onClick={() => {
+              signOut();
+              router.replace("/login");
+            }}
+            className="whitespace-nowrap rounded-md px-3 py-1.5 text-[13px] text-mute hover:text-ink"
+          >
+            ⏻ Sign out
+          </button>
         </div>
 
         <main className="flex-1 px-6 py-7">
