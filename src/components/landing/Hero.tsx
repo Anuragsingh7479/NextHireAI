@@ -27,10 +27,10 @@ export function Hero() {
         {/* left: headline + CTAs */}
         <div className="hero-col-left max-w-[460px]">
           <h1
-            className="m-0 font-semibold leading-[1.04] tracking-[-1px] text-ink"
+            className="m-0 font-semibold leading-[1.05] tracking-[-0.5px] text-ink sm:tracking-[-1px]"
             style={{
               fontFeatureSettings: "var(--font-features-display)",
-              fontSize: "clamp(40px, 4.6vw, 64px)",
+              fontSize: "clamp(28px, 7vw, 64px)",
             }}
           >
             {HEADLINE.map((line, i) => (
@@ -44,7 +44,7 @@ export function Hero() {
             ))}
           </h1>
           <div
-            className="hero-fade mt-[30px] flex gap-[10px]"
+            className="hero-fade mt-[30px] flex flex-wrap justify-center gap-[10px] sm:justify-start"
             style={{ ["--d" as string]: "320ms" }}
           >
             <Button href="/signup" variant="primary">

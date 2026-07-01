@@ -18,7 +18,7 @@ export function Logo() {
           strokeLinejoin="round"
         />
       </svg>
-      <span className="text-base font-semibold tracking-[-0.2px] text-ink">
+      <span className="whitespace-nowrap text-base font-semibold tracking-[-0.2px] text-ink">
         NextHire<span className="text-mute"> AI</span>
       </span>
     </Link>
